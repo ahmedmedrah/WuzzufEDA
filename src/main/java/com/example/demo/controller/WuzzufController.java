@@ -67,10 +67,4 @@ public class WuzzufController {
         return service.skill();
     }
 
-
-    @GetMapping("/kMeans")
-    public  String kMeans() throws IOException {
-        return service.kMeans();
-    }
-
 }

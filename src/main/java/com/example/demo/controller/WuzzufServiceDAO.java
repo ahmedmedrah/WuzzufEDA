@@ -21,59 +21,50 @@ import java.util.stream.Collectors;
 import static org.apache.spark.sql.functions.col;
 
 public class WuzzufServiceDAO {
+    // start spark session
     public DataFrameReader getFrameReader(){
-        final SparkSession session = SparkSession.builder().appName("CSV analasis").master("local[*]").getOrCreate();
+        final SparkSession session = SparkSession.builder().appName("CSV analysis").master("local[*]").getOrCreate();
         return session.read();
     }
-    public SparkSession getFrameRead(){
-        final SparkSession session = SparkSession.builder().appName("CSV analasis").master("local[*]").getOrCreate();
-        return session;
-    }
 
+    // read the csv into RDD
     public Dataset<Row> getDataset() {
         Dataset<Row> data = getFrameReader().option("header", "true").csv("src\\main\\resources\\wuzzufjobs.csv").na().drop();
-        data = data.dropDuplicates().filter((FilterFunction<Row>) row -> !row.get(5).equals("null Yrs of Exp"));
+        data = data.dropDuplicates().filter((FilterFunction<Row>) row -> !row.get(5).equals("null Yrs of Exp")).cache();
         return data;
     }
 
     Dataset<Row> data = getDataset();
 
+    // get the first 10 rows of data
     public String ShowData(){
         List<Row> first_10_records = data.limit(10).collectAsList();
         return DisplayHtml.displayrows(data.columns(), first_10_records);
     }
 
-
+    // get the structure of the data
     public String structure(){
-
         StructType d = data.schema();
-
-
         return d.prettyJson();
 
     }
 
 
-
+    // get the summary statistics of the data
     public String summary() {
-
         Dataset<Row> d = data.summary();
         List<Row> summary = d.collectAsList();
         return DisplayHtml.displayrows(d.columns(), summary);
     }
-    /*
-    public String ShowSchema(){
-        List<Row> schema = data.schema().coll;
-        return DisplayHtml.displayrows(data.columns(), first_10_records);
-    }
-    */
 
+    // get the top 10 companies that are hiring
     public String JobsByCompany(){
-        Dataset<Row> groupeddatabycompany = data.groupBy("Company").count().orderBy(col("count").desc()).limit(30);;
+        Dataset<Row> groupeddatabycompany = data.groupBy("Company").count().orderBy(col("count").desc()).limit(10);
          List<Row> top_Companies = groupeddatabycompany.collectAsList();
         return DisplayHtml.displayrows(groupeddatabycompany.columns(), top_Companies);
     }
 
+    // create a pie chart of top 10 companies that are hiring
     public String getPieChartforCompany() throws IOException {
         Dataset<Row> groupeddatabycompany = data.groupBy("Company").count().orderBy(col("count").desc()).limit(10);;
         List<String> companies = groupeddatabycompany.select("Company").as(Encoders.STRING()).collectAsList();
@@ -96,12 +87,15 @@ public class WuzzufServiceDAO {
         BitmapEncoder.saveBitmap(chart,path, BitmapEncoder.BitmapFormat.PNG);
         return DisplayHtml.viewchart(path);
     }
+
+    // get the top 30 jobs needed
     public String JobsByTitles(){
         Dataset<Row> groupeddatabytitle = data.groupBy("Title").count().orderBy(col("count").desc()).limit(30);;
         List<Row> top_titles = groupeddatabytitle.collectAsList();
         return DisplayHtml.displayrows(groupeddatabytitle.columns(), top_titles);
     }
 
+    // create a bar chart of the top 10 jobs needed
     public String TitlesBarChart() throws IOException {
         Dataset<Row> groupeddatabytitles = data.groupBy("Title").count().orderBy(col("count").desc()).limit(10);
         List<String> titles = groupeddatabytitles .select("Title").as(Encoders.STRING()).collectAsList();
@@ -113,14 +107,14 @@ public class WuzzufServiceDAO {
         return DisplayHtml.viewchart(path);
     }
 
-
-
+    // get the top 30 locations
     public String JobsByAreas(){
         Dataset<Row> groupeddatabyareas = data.groupBy("Location").count().orderBy(col("count").desc()).limit(30);;
         List<Row> top_titles = groupeddatabyareas.collectAsList();
         return DisplayHtml.displayrows(groupeddatabyareas.columns(), top_titles);
     }
 
+    // create a bar chart of the top 30 locations
     public String areasBarChart() throws IOException {
         Dataset<Row> groupeddatabylocation = data.groupBy("Location").count().orderBy(col("count").desc()).limit(10);
         List<String> location = groupeddatabylocation .select("Location").as(Encoders.STRING()).collectAsList();
@@ -132,6 +126,7 @@ public class WuzzufServiceDAO {
         return DisplayHtml.viewchart(path);
     }
 
+    // get the top 10 skills needed for hiring
     public ResponseEntity<Object> skill() {
         List<String> allskills = data.select("Skills").as(Encoders.STRING()).collectAsList();
         List<String> skills = new ArrayList<>();
@@ -157,37 +152,5 @@ public class WuzzufServiceDAO {
 
     }
 
-    public String kMeans(){
-        Dataset<Row> df = data.as("df");
-        String columns[] = {"Title", "Company", "Location", "Type", "Level", "YearsExp", "Country"};
-        String indexedColumns[] = {"Title indexed", "Company indexed", "Location indexed", "Type indexed", "Level indexed","YearsExp indexed", "Country indexed"};
-        // Factorizing All Categorical Features
-        int i ;
-        for(i = 0; i < columns.length; i++){
-
-            StringIndexer indexer = new StringIndexer();
-            indexer.setInputCol(columns[i]).setOutputCol(indexedColumns[i]);
-            df = indexer.fit(df).transform(df);
-        }
-
-        // Casting The New Features To Double
-        for(i = 0; i < columns.length; i++){
-            df = df.withColumn (indexedColumns[i], df.col (indexedColumns[i]).cast ("double"));
-        }
-
-        // vector assembler that will contain feature columns
-        VectorAssembler vectorAssembler = new VectorAssembler ();
-        vectorAssembler.setInputCols (indexedColumns).setOutputCol("features");
-        Dataset<Row> trainData = vectorAssembler.transform (df);
-        // show some data after transforming
-
-        // Trains a k-means model with k = 6
-        KMeans kmeans = new KMeans().setK(6).setSeed(1L);
-        kmeans.setFeaturesCol("features");
-        KMeansModel model = kmeans.fit(trainData);
-        // Evaluate clustering by computing Within Set Sum of Squared Errors.
-        int iter = model.getMaxIter();
-        return "Number Of Iterations is : " + String.valueOf(iter);
-    }
 }
 
